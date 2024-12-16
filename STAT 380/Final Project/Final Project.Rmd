@@ -23,7 +23,12 @@ remove(list = ls())
 #Loading in Essential Libraries
 library(tidyverse)
 library(ggplot2)
-
+library(e1071)
+library(caTools)
+library(caret)
+library(randomForest)
+```
+```{r}
 #Loading in the Dataxdsw3
 CODGames_p1_380 <- read.csv("CODMaps.csv") #589 rows, 27 columns
 CODGames_p2_380 <- read.csv("CODGames_p2_380.csv") #250 rows, 27 columns
@@ -379,3 +384,155 @@ The interaction terms in the improved model highlight that the effect of Score o
 Residual analysis indicates the model assumptions are mostly met, but refining the models with transformations or regression techniques could address issues with the dataset. 
 
 # Task 4: Prediction {#part4}
+
+For this task, we will be performing a comparative analysis of three different predictive models. We have opted to include Random Forest, Logistic Regression, and Naive Bayes models. The Random Forest model was required to be used, we were able to refer to the Logistic Regression model used within the notes, and we referred to the Naive Bayes model included in the caret library (found [here](https://www.geeksforgeeks.org/naive-bayes-classifier-in-r-programming/)) to compare how the probabilistic model compares with the other respective models. However, before we are able to properly begin performing the model creation process, we will need to develop our research question.       
+
+### Research Question: How well can we predict the performance of the players team given the players individual metrics: Eliminations, Deaths, Score, and Damage?
+
+Ultimately, we decided upon the variables: eliminations, Deaths, Score, and Damage for a couple of different reasons. Firstly, these are the statistical metrics of the players performance, and we have decided to include all except for the experience gain of the player as there are specific categories which create inconsistencies in the total experience gained in the match. Furthermore, if we decided to include only matches with a specific type of experience gain (XPType), then we will remove a significant amount of data from the model training which can impact the predictive capability of the different models. Therefore, we have decided to stick with the player performance metrics to predict the players team result. First, to implement the models we will need to perform some data cleaning to prepare the training data for the machine learning models.    
+
+### Data Cleaning
+
+```{r}
+split <- function(X) {
+  # Handle missing values
+  
+  if (is.na(X) || X == "") {
+    return(c(NA, NA))
+  }
+  
+  # Split the string
+  parts <- unlist(strsplit(X, "-"))
+  
+  # Convert to numeric and return
+  return(as.numeric(parts))
+}
+```
+
+```{r}
+# Apply the function to all of the results and store the results in a new data frame 
+results <- sapply(X = combined$Result, FUN = split)
+
+```
+
+```{r}
+# Store results as a data frame to create the Won variable
+Results <- data.frame(
+  Result = combined$Result,
+  Player = results[1, ],
+  Opposition = results[2, ]) %>%
+  mutate(Won = ifelse(Player > Opposition, "Yes","No"))
+
+combined$Won <- Results$Won
+
+# Keep only the indices with no na's
+combined <- combined[!is.na(combined$Won), ]
+  
+# Check the first 5 rows
+combined %>%
+  select(Result, Won) %>%
+  head(5)
+```
+
+```{r}
+# Create indicator for Won
+combined <- 
+  combined %>%
+  mutate(Won_bit = ifelse(Won == "Yes", 1, 0))
+
+# Check to make sure there are no na's
+sum(is.na(combined$Won_bit))
+```
+
+```{r}
+# Create Train and Test split
+set.seed(123)
+trainInd <- sample(1:nrow(combined), floor(0.8 * nrow(combined)))
+set.seed(NULL)
+
+Train <- combined[trainInd, ]
+Validation <- combined[-trainInd, ]
+```
+
+### Model Creation
+
+```{r}
+set.seed(123)
+
+# Random forest model
+rfModel <- randomForest(as.factor(Won) ~ Eliminations+Deaths+Score+Damage, 
+                        data = Train, 
+                        ntree = 500, 
+                        mtry = 3)
+
+# Logistic regression model
+logModel <- glm(Won_bit ~ Eliminations+Deaths+Score+Damage, family = binomial, data = Train)
+
+# Naive Bayes Model
+bayesModel <- naiveBayes(Won ~ Eliminations+Deaths+Score+Damage, data = Train)
+
+set.seed(NULL)
+```
+
+### Model Exploration
+
+```{r}
+# For Random Forest
+varImpPlot(rfModel, n.var = 6)
+```
+
+```{r}
+# For Logistic Regression
+summary(logModel)
+```
+#### Naive Bayes model was summarized in the next section
+
+
+### Model Evaluation
+
+```{r}
+# Generate results for Random Forest Model
+predWon <- predict(rfModel, newdata = Validation)
+  
+#Create confusion matrix
+table(predWon, Validation$Won)
+
+#Calculate accuracy
+mean(predWon == Validation$Won)
+```
+
+```{r}
+# Generate results for Logistic Regression Model
+
+# Establish threshold
+threshold <- 0.50
+
+# Generate predictions
+pred_prob <- predict(logModel, newdata = Validation, type = "response")
+
+#  
+pred_won <- ifelse(pred_prob > threshold, "Yes", "No")
+
+#Create confusion matrix
+table(pred_won, Validation$Won)
+
+#Calculate accuracy
+mean(pred_won == Validation$Won)
+```
+
+```{r}
+# Generate results for Naive Bayes Model
+y_pred <- predict(bayesModel, newdata = Validation)
+cm <- table(Validation$Won, y_pred)
+confusionMatrix(cm)
+```
+
+### Analysis of Models
+
+Overall, the models performed with a very similar level of prediction accuracy with the Logistic Regression model with a threshold of 0.5 performing the best with an overall accuracy over 0.7. We decided to use a threshold for prediction probability of over 0.5 as the threshold so that we could divide the values in half, as we did not want the threshold to be a large determiner in the overall accuracy of the model predictions. The next highest performing model was the Random Forest model with an accuracy score of 0.679. Finally, the Naive Bayes model came in just behind with an overall accuracy of 0.672. It is pertinent to note that all of these scores were the result of the model predicting new data that we had originally separated when training the model.    
+
+To make a more comprehensive analysis of the different models, we have opted to compare the confusion matrices that I have generated for each of the respective models. From the analysis, you can see that the Logistic Regression model predicted the most number of TP with 73, while having the lowest number of FP with only 16. Meanwhile, the Random Forest Model predicted the negative values with the most success, with 46 TN and only 27 FN. 
+
+While it is interesting to compare the different models, it is likely that for the purposes of predicting the team result relative to the players overall performance, roughly 70% accuracy from the different classification model applications is a fairly reasonable result. We can see this conceptually in the feature importance visual for the random forest and the summary of the logistic regression model. The models contain completely opposite feature importance hierarchy as determined by the decrease in gini gain and the coefficients respectively. As the random forest model obtains the largest gini gain from the Score and Damage variables, the Logistic Model uses the Eliminations and Deaths attributes to determine the team result. Overall, it is interesting to compare the different prediction metrics although our answer for our question ultimately lies around a predictive accuracy of 70% for the team result based on the individual player match performance attributes.       
+
+
