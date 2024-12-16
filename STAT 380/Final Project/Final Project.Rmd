@@ -1,9 +1,19 @@
 ---
 title: "Final_Project"
-author: Ahsan Sultan, Priyanshu Dey, Janvi Ahuja, Daniel Miller
+author: 
+  - "Ahsan Sultan"
+  - "Priyanshu Dey" 
+  - Janvi Ahuja" 
+  - "Daniel Miller"
 output: html_document
 date: "2024-12-10"
 ---
+
+1. [Introduction](#introduction)
+2. [Part 1: Data Cleaning and Data Visualization – Complete without Generative AI](#part1)
+3. [Part 2: Data Cleaning and Data Visualization – Complete with Generative AI](#part2)
+4. [Part 3:Inference ](#part3)
+5. [Part 4: Prediction](#part4)
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -15,14 +25,14 @@ remove(list = ls())
 library(tidyverse)
 library(ggplot2)
 
-#Loading in the Data
-CODGames_p1_380 <- read.csv("/Users/janviahuja/Downloads/CODMaps.csv") #589 rows, 27 columns
-CODGames_p2_380 <- read.csv("/Users/janviahuja/Downloads/CODGames_p2_380.csv") #250 rows, 27 columns
-CODMaps <- read.csv("/Users/janviahuja/Downloads/CODGames_p2_380.csv")
-CODGameModes <- read.csv("/Users/janviahuja/Downloads/CODGameModes.csv")
+#Loading in the Dataxdsw3
+CODGames_p1_380 <- read.csv("CODMaps.csv") #589 rows, 27 columns
+CODGames_p2_380 <- read.csv("CODGames_p2_380.csv") #250 rows, 27 columns
+CODMaps <- read.csv("CODGames_p2_380.csv")
+CODGameModes <- read.csv("CODGameModes.csv")
 ```
 
-
+# Task 1 - Data Cleaning and Data Visualization   {#part1}
 My thought process is that after reading through the Final Project PDF and going over the data csvs I realized that most of the CSVs need some cleansing to do. Since CODGames_p1_380 and CODGames_p2_380 are basically about a player each and their rankings in the online game, I think we should merge the dataframes to make it one more combined dataframe. I also realized that each of the two csvs have null values in the map and choices column so it would be important to remove them to keep all values in check. There are also trailing spaces as highlighted in the document so we would have to remove that also. I think it would be smart to eliminate rows that have missing choice values because they cant determine the winner. My thinking for the map winning criteria was to get unique maps from both map1 and map2 and then count the number of times they appear and then count wins where the map was chosen. Then I would count win from ties when map was map1.
 
 ```{r}
@@ -111,7 +121,7 @@ Nuketown '84 variants dominate with the highest win rates (Halloween version at 
 Crossroads Strike shows strong performance with a 77.6% win rate
 Raid and Standoff are consistently popular choices, winning 75% and 70% of their appearances respectively
 
-### Task 2
+# Task 2 - Data Cleaning and Data Visualization with Generative AI Tool Selection {#part2}
 
 Generative AI Tool Selection
 
@@ -132,10 +142,10 @@ library(dplyr)
 library(ggplot2)
 library(tidyr)
 
-game_modes_df <- read.csv("/Users/janviahuja/Downloads/CODGameModes.csv", stringsAsFactors = FALSE)
-games_p1_df <- read.csv("/Users/janviahuja/Downloads/CODGames_p1_380.csv", stringsAsFactors = FALSE)
-games_p2_df <- read.csv("/Users/janviahuja/Downloads/CODGames_p2_380.csv", stringsAsFactors = FALSE)
-maps_df <- read.csv("/Users/janviahuja/Downloads/CODMaps.csv", stringsAsFactors = FALSE)
+game_modes_df <- read.csv("CODGameModes.csv", stringsAsFactors = FALSE)
+games_p1_df <- read.csv("CODGames_p1_380.csv", stringsAsFactors = FALSE)
+games_p2_df <- read.csv("CODGames_p2_380.csv", stringsAsFactors = FALSE)
+maps_df <- read.csv("CODMaps.csv", stringsAsFactors = FALSE)
 ```
 
 ```{r}
@@ -240,3 +250,131 @@ The generative AI solution, on the other hand, focuses on speed and simplicity. 
 
 In terms of their strengths, our code is highly reliable and accurate, making it better for datasets that require careful handling of inconsistencies. On the other hand, the AI-generated solution is faster and more efficient, excelling when the data is already clean and well-organized. Overall, our code is the better choice when reliability is a priority, especially for datasets with potential issues. However, the generative AI solution is more suitable when speed and efficiency are needed for large-scale data. Combining the thoroughness of our code with the speed of the AI solution would create an ideal balance between reliability and performance.
 
+# Task 3: Inference {#part3}
+
+## Relevant Information
+
+**Research Question:** How does GameType affect TotalXP after accounting for the player's Score?
+
+## Data Cleaning
+
+```{r}
+# Clean GameType to merge HC and non-HC variants
+combined <- combined %>%
+  mutate(GameType = str_remove(GameType, "HC - ")) %>%
+  mutate(GameType = str_trim(GameType))
+```
+
+## Summary Statistics
+
+Explore the distribution of TotalXP across GameTypes.
+
+```{r}
+combined %>%
+  group_by(GameType) %>%
+  summarize(
+    MeanXP = mean(TotalXP, na.rm = TRUE),
+    MedianXP = median(TotalXP, na.rm = TRUE),
+    Count = n()
+  ) %>%
+  arrange(desc(MeanXP))
+```
+
+## Data Visualization
+
+### Distribution of TotalXP by GameType
+
+```{r}
+ggplot(combined, aes(x = GameType, y = TotalXP)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(
+    title = "Distribution of TotalXP by GameType",
+    x = "GameType",
+    y = "TotalXP"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+### Scatter Plot of TotalXP vs. Score by GameType
+
+```{r}
+ggplot(combined, aes(x = Score, y = TotalXP, color = GameType)) +
+  geom_point(alpha = 0.7) +
+  theme_minimal() +
+  labs(
+    title = "TotalXP vs. Score by GameType",
+    x = "Score",
+    y = "TotalXP",
+    color = "GameType"
+  )
+```
+
+## Modeling
+
+### Base Model: TotalXP ~ Score + GameType
+
+```{r}
+base_model <- lm(TotalXP ~ Score + GameType, data = combined)
+summary(base_model)
+```
+
+### Improved Model: TotalXP ~ Score * GameType
+
+```{r}
+
+improved_model <- lm(TotalXP ~ Score * GameType, data = combined)
+summary(improved_model)
+
+# Ensure residuals and fitted values match the dataset size
+combined <- combined %>%
+  filter(!is.na(TotalXP) & !is.na(Score)) %>%
+  mutate(
+    residuals = residuals(improved_model),
+    fitted = fitted(improved_model)
+  )
+```
+##### Explanation for the improved model:
+The improved model incorporates an interaction term (Score * GameType) to explore whether the relationship between Score and TotalXP varies across different GameTypes. This is based on the idea that some GameTypes may reward specific in-game actions or objectives differently, and these rewards could scale with Score in distinct ways. By including the interaction term, we can investigate how the effect of Score on TotalXP changes depending on the GameType.
+
+## Model Diagnostics: Residual Analysis
+
+#### Residuals vs Fitted Values
+
+```{r}
+ggplot(combined, aes(x = fitted, y = residuals)) +
+  geom_point(alpha = 0.7) +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+  theme_minimal() +
+  labs(
+    title = "Residuals vs Fitted Values",
+    x = "Fitted Values",
+    y = "Residuals"
+  )
+```
+
+#### QQ Plot for Residual Normality
+
+```{r}
+ggplot(combined, aes(sample = residuals)) +
+  geom_qq() +
+  geom_qq_line(color = "red") +
+  theme_minimal() +
+  labs(
+    title = "QQ Plot of Residuals",
+    x = "Theoretical Quantiles",
+    y = "Sample Quantiles"
+  )
+```
+
+## Results and Interpretation
+
+The analysis shows that GameType significantly impacts TotalXP after accounting for the player's Score. GameTypes such as "Domination" yield the highest TotalXP, followed by "Hardpoint" and "TDM," reflecting the differences in objectives and gameplay dynamics. These results align with the expectation that modes requiring more strategic play and longer durations lead to higher TotalXP.
+
+However, the models explain only about 30% of the variation in TotalXP, suggesting other factors, like player skill, time spent in-game, or specific in-game actions, also play a role. Including these variables could improve the model's accuracy. Additionally, the Score-TotalXP relationship may not be strictly linear, and testing non-linear models could provide a better fit.
+
+The interaction terms in the improved model highlight that the effect of Score on TotalXP varies by GameType, but most were not statistically significant. Simplifying the model by focusing only on significant interactions or using advanced methods like random forests may capture these relationships more effectively.
+
+Residual analysis indicates the model assumptions are mostly met, but refining the models with transformations or regression techniques could address issues like uneven residual spread. 
+
+# Task 4: Prediction {#part4}
