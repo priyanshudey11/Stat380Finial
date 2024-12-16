@@ -9,11 +9,10 @@ output: html_document
 date: "2024-12-10"
 ---
 
-1. [Introduction](#introduction)
-2. [Part 1: Data Cleaning and Data Visualization – Complete without Generative AI](#part1)
-3. [Part 2: Data Cleaning and Data Visualization – Complete with Generative AI](#part2)
-4. [Part 3:Inference ](#part3)
-5. [Part 4: Prediction](#part4)
+1. [Part 1: Data Cleaning and Data Visualization – Complete without Generative AI](#part1)
+2. [Part 2: Data Cleaning and Data Visualization – Complete with Generative AI](#part2)
+3. [Part 3:Inference ](#part3)
+4. [Part 4: Prediction](#part4)
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -105,6 +104,8 @@ maxresults <- calculate_win_stats(combined)
 
 ### Visualization
 ```{r}
+  # Optional: Remove rows with NA
+
 ggplot(maxresults, aes(x = reorder(Map, Win_Rate), y = Win_Rate)) +
     geom_bar(stat = "identity", fill = "red") +
     coord_flip() +
