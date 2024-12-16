@@ -375,6 +375,6 @@ However, the models explain only about 30% of the variation in TotalXP, suggesti
 
 The interaction terms in the improved model highlight that the effect of Score on TotalXP varies by GameType, but most were not statistically significant. Simplifying the model by focusing only on significant interactions or using advanced methods like random forests may capture these relationships more effectively.
 
-Residual analysis indicates the model assumptions are mostly met, but refining the models with transformations or regression techniques could address issues like uneven residual spread. 
+Residual analysis indicates the model assumptions are mostly met, but refining the models with transformations or regression techniques could address issues with the dataset. 
 
 # Task 4: Prediction {#part4}
