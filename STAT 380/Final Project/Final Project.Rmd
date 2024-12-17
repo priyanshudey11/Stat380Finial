@@ -40,7 +40,6 @@ CODGameModes <- read.csv("CODGameModes.csv")
 My thought process is that after reading through the Final Project PDF and going over the data csvs I realized that most of the CSVs need some cleansing to do. Since CODGames_p1_380 and CODGames_p2_380 are basically about a player each and their rankings in the online game, I think we should merge the dataframes to make it one more combined dataframe. I also realized that each of the two csvs have null values in the map and choices column so it would be important to remove them to keep all values in check. There are also trailing spaces as highlighted in the document so we would have to remove that also. I think it would be smart to eliminate rows that have missing choice values because they cant determine the winner. My thinking for the map winning criteria was to get unique maps from both map1 and map2 and then count the number of times they appear and then count wins where the map was chosen. Then I would count win from ties when map was map1.
 
 ```{r}
-### I feel we should double check if we should use rbind or bind_rows
 combined <- bind_rows(CODGames_p1_380, CODGames_p2_380)
 
 combined <- combined %>%
@@ -256,6 +255,7 @@ The generative AI solution, on the other hand, focuses on speed and simplicity. 
 
 In terms of their strengths, our code is highly reliable and accurate, making it better for datasets that require careful handling of inconsistencies. On the other hand, the AI-generated solution is faster and more efficient, excelling when the data is already clean and well-organized. Overall, our code is the better choice when reliability is a priority, especially for datasets with potential issues. However, the generative AI solution is more suitable when speed and efficiency are needed for large-scale data. Combining the thoroughness of our code with the speed of the AI solution would create an ideal balance between reliability and performance.
 
+After doing the last checks we should have been more carefull but our intial map csv was wrong and messed up our project. 
 # Task 3: Inference {#part3}
 
 ## Relevant Information
