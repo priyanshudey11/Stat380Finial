@@ -1,0 +1,542 @@
+---
+title: "Final_Project"
+author: "Ahsan Sultan, Janvi Ahuja, Priyanshu Dey, Daniel Miller "
+output: html_document
+date: "2024-12-10"
+---
+
+1. [Part 1: Data Cleaning and Data Visualization – Complete without Generative AI](#part1)
+2. [Part 2: Data Cleaning and Data Visualization – Complete with Generative AI](#part2)
+3. [Part 3:Inference ](#part3)
+4. [Part 4: Prediction](#part4)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+remove(list = ls())
+#Loading in Essential Libraries
+library(tidyverse)
+library(ggplot2)
+library(e1071)
+library(caTools)
+library(caret)
+library(randomForest)
+```
+```{r}
+#Loading in the Dataxdsw3
+game_modes_df <- read.csv("CODGameModes.csv", stringsAsFactors = FALSE)
+games_p1_df <- read.csv("CODGames_p1_380.csv", stringsAsFactors = FALSE)
+games_p2_df <- read.csv("CODGames_p2_380.csv", stringsAsFactors = FALSE)
+maps_df <- read.csv("CODMaps.csv", stringsAsFactors = FALSE)
+```
+
+# Task 1 - Data Cleaning and Data Visualization   {#part1}
+After analyzing the structure of the two datasets, CODGames_p1_380 and CODGames_p2_380, we realized that these files contain similar data for individual players and their rankings in the game. Therefore, it made sense to merge the two dataframes into a single combined dataframe for a unified analysis.
+
+Upon inspecting the data, we noticed that both datasets include null values in the Map1, Map2, and Choice columns. These null values must be handled carefully because rows with missing Choice values cannot determine a winner, so it was logical to remove them from the dataset. Additionally, there are trailing spaces in the map names, which can create inconsistencies when performing operations like counting or matching names. Cleaning these spaces was a necessary step for accuracy.
+
+To ensure map names are clean and standardized, we used a reference list from the CODMaps.csv file. We implemented a function to compare and correct map names by matching them to valid names in the reference list. If a map name did not match any in the list, it was marked as NA to avoid inaccuracies in subsequent calculations.
+
+For the winning criteria, we approached the problem in the following way:
+
+We combined Map1 and Map2 into a single column to count the total appearances of each unique map as a candidate.
+We counted the number of times a map won by looking at the Choice column.
+To account for ties, where Map1 is selected as the default winner, the Choice values were treated appropriately during the win counting.
+
+Finally, we calculated the win proportion for each map as the ratio of wins (WinCount) to total appearances (CandidateCount). The results were then sorted in descending order of win proportion to identify the maps with the best performance.
+
+```{r}
+# Combine datasets
+combined <- bind_rows(games_p1_df, games_p2_df)
+
+# Clean column names and map names
+combined <- combined %>%
+  rename_with(trimws) %>%
+  mutate(
+    Map1 = trimws(Map1),
+    Map2 = trimws(Map2),
+    Choice = trimws(Choice)
+  )
+
+maps_df <- maps_df %>%
+  rename_with(trimws) %>%
+  mutate(Name = trimws(Name))
+
+valid_maps <- maps_df$Name
+
+# Correct map names using a function
+correct_map_name <- function(map_name, valid_names) {
+  if (is.na(map_name)) return(map_name)
+  for (valid_name in valid_names) {
+    if (tolower(map_name) == tolower(valid_name)) {
+      return(valid_name)
+    }
+  }
+  return(NA)
+}
+
+# Apply the correction to Map1, Map2, and Choice
+combined <- combined %>%
+  mutate(
+    Map1 = sapply(Map1, correct_map_name, valid_names = valid_maps),
+    Map2 = sapply(Map2, correct_map_name, valid_names = valid_maps),
+    Choice = sapply(Choice, correct_map_name, valid_names = valid_maps)
+  )
+
+```
+
+```{r}
+# Count total appearances as candidate (Map1 and Map2)
+map_candidate_counts <- combined %>%
+  pivot_longer(cols = c(Map1, Map2), names_to = "Position", values_to = "Map") %>%
+  filter(!is.na(Map)) %>%
+  count(Map, name = "CandidateCount")
+
+# Count total wins
+map_wins <- combined %>%
+  filter(!is.na(Choice)) %>%
+  count(Choice, name = "WinCount")
+
+# Merge the counts and calculate win proportion
+map_stats <- map_candidate_counts %>%
+  full_join(map_wins, by = c("Map" = "Choice")) %>%
+  mutate(
+    WinCount = replace_na(WinCount, 0),
+    WinProportion = WinCount / CandidateCount
+  ) %>%
+  arrange(desc(WinProportion))
+
+# Display the table
+print(map_stats)
+```
+
+```{r}
+# Bar chart for Win Proportion with Map on y-axis and Proportion on x-axis
+ggplot(map_stats, aes(x = WinProportion, y = reorder(Map, WinProportion))) +
+  geom_bar(stat = "identity", fill="red") +
+  theme_minimal() +
+  labs(
+    title = "Win Proportion of Maps when Chosen as Candidates",
+    x = "Win Proportion",
+    y = "Map"
+  )
+```
+
+
+
+To answer research question we looked at the graph/chart for the following insights:
+The graph highlights a clear disparity in the win proportions of maps when chosen as candidates. Standoff emerges as the most dominant map, with a win proportion close to 1.0, indicating that it is almost always selected when presented as an option. Following closely are Crossroads Strike and Nuketown '84, both of which also exhibit strong performance and popularity among players. Maps like Raid, Diesel, and Slums demonstrate consistent reliability, with win proportions ranging between 0.75 and 0.85. In the mid-range, maps such as Collateral Strike, Rush, and Express win frequently but not as consistently as the top-performing maps. On the lower end, Jungle, Echelon, and Miami have the lowest win proportions, suggesting that they are rarely chosen by players when available as candidates. This distribution highlights a strong preference among players for certain maps, particularly Standoff, while others struggle to gain traction.
+
+# Task 2 - Data Cleaning and Data Visualization with Generative AI Tool Selection {#part2}
+
+Generative AI Tool Selection
+
+For this task, we utilized ChatGPT (OpenAI GPT-4).
+
+Prompts Used:
+We have a dataset containing information about video game voting, including two candidate maps (Map1 and Map2) and the final map selected (Choice). The dataset contains issues such as trailing spaces, null or missing values, and inconsistent map names. A reference list of valid map names is available in a separate file (CODMaps.csv). The first step is to clean the dataset by removing trailing spaces from map names, replacing invalid or unmatched map names with NA using the reference list, and eliminating rows where Choice is missing, as these rows do not contribute to win analysis.
+
+After cleaning the dataset, the next step is to analyze the performance of each map. Specifically, we aim to count the total number of appearances for each map as a candidate by combining occurrences in Map1 and Map2. Additionally, we need to calculate the total number of wins for each map based on the Choice column while ensuring that missing values or invalid maps are excluded from the counts.
+
+Using the candidate and win counts, we then calculate the win proportion for each map as the ratio of wins to total appearances, given by the formula:
+
+The formula for win proportion is:  
+
+$$
+\text{Win Proportion} = \frac{\text{Win Count}}{\text{Candidate Count}}
+$$
+
+To ensure completeness, any missing win counts or candidate counts should be replaced with zero. Finally, the results should be sorted in descending order of win proportion to identify the best-performing maps.
+
+To visualize the results, we will create a horizontal bar chart using ggplot2. The x-axis will represent the win proportion, while the y-axis will list the maps, sorted in descending order of win proportion. The bars will be filled with a specific color, and a legend will be included to label the win proportion. This visualization will provide a clear and intuitive representation of each map's performance based on the calculated win proportions.
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+
+# Load data
+game_modes_df <- read.csv("CODGameModes.csv")
+games_p1_df <- read.csv("CODGames_p1_380.csv")
+games_p2_df <- read.csv("CODGames_p2_380.csv")
+maps_df <- read.csv("CODMaps.csv")
+
+# Combine datasets
+games_df <- bind_rows(games_p1_df, games_p2_df)
+```
+
+```{r}
+# Clean column names and map names
+games_df <- games_df %>%
+  rename_with(trimws) %>%
+  mutate(
+    Map1 = trimws(Map1),
+    Map2 = trimws(Map2),
+    Choice = trimws(Choice)
+  )
+
+maps_df <- maps_df %>%
+  rename_with(trimws) %>%
+  mutate(Name = trimws(Name))
+
+valid_maps <- maps_df$Name
+
+# Function to correct map names
+correct_map_name <- function(map_name, valid_names) {
+  if (is.na(map_name)) return(map_name)
+  for (valid_name in valid_names) {
+    if (tolower(map_name) == tolower(valid_name)) {
+      return(valid_name)
+    }
+  }
+  return(NA)  # Replace invalid names with NA
+}
+
+# Correct map names
+games_df <- games_df %>%
+  mutate(
+    Map1 = sapply(Map1, correct_map_name, valid_names = valid_maps),
+    Map2 = sapply(Map2, correct_map_name, valid_names = valid_maps),
+    Choice = sapply(Choice, correct_map_name, valid_names = valid_maps)
+  )
+```
+
+```{r}
+# Count total occurrences of each map as a candidate
+map_candidate_counts <- games_df %>%
+  pivot_longer(cols = c(Map1, Map2), names_to = "Position", values_to = "Map") %>%
+  filter(!is.na(Map)) %>%
+  count(Map, name = "CandidateCount")
+
+# Count total wins for each map
+map_wins <- games_df %>%
+  filter(!is.na(Choice)) %>%
+  count(Choice, name = "WinCount")
+```
+
+```{r}
+# Merge counts and calculate win probabilities
+map_stats <- map_candidate_counts %>%
+  full_join(map_wins, by = c("Map" = "Choice")) %>%
+  mutate(
+    WinCount = replace_na(WinCount, 0),
+    CandidateCount = replace_na(CandidateCount, 0),
+    WinProbability = ifelse(CandidateCount > 0, WinCount / CandidateCount, 0)
+  ) %>%
+  arrange(desc(WinProbability))
+
+# Debugging: Print counts to verify no missing values or misaggregations
+print("Map Candidate Counts:")
+print(map_candidate_counts)
+
+print("Map Wins:")
+print(map_wins)
+
+print("Final Map Stats:")
+print(map_stats)
+```
+```{r}
+# Visualization of Win Probabilities
+ggplot(map_stats, aes(x = reorder(Map, -WinProbability), y = WinProbability)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(
+    title = "Win Probability of Maps when Chosen as Candidates",
+    x = "Map",
+    y = "Win Probability"
+  )
+```
+
+Comparison: Generative AI vs. Manual Solution
+
+Both the manual code and the generative AI solution effectively tackle the task of calculating map win proportions, but they differ in their approaches, structure, and efficiency. Both solutions include data cleaning steps to handle issues such as trailing spaces, invalid or missing values, and inconsistent map names. They also use tidyverse libraries like dplyr, tidyr, and ggplot2 for data manipulation and visualization, producing clear bar charts to display the results. However, while the outcomes are similar, the approaches highlight key differences in methodology, flexibility, and performance.
+
+The manual code takes a methodical, step-by-step approach. It systematically merges the datasets, removes inconsistencies, and carefully applies a function to validate and correct map names using a reference list (CODMaps.csv). The code is highly detailed, ensuring that all edge cases, such as unmatched or missing map names, are handled accurately. This thorough process makes the manual solution more robust and reliable, particularly when dealing with messy or incomplete datasets. However, the iterative logic in the manual approach can slow performance for larger datasets, and the step-by-step structure leads to longer code, which, while readable and easy to debug, may require more effort to implement.
+
+The generative AI solution, on the other hand, focuses on simplicity and efficiency. It uses vectorized operations and compact code to achieve the same objectives in fewer steps. By leveraging sapply and tidyverse functions, the AI-generated code processes data quickly, which is particularly beneficial for larger datasets. However, the AI solution assumes cleaner input data and focuses less on addressing edge cases comprehensively. For example, while it matches and corrects map names, its reliance on default operations may not handle subtle issues like incomplete name matches as thoroughly as the manual solution. The AI-generated code is concise and efficient but may introduce errors when faced with highly inconsistent or messy datasets.
+
+In terms of strengths, the manual code offers higher reliability, accuracy, and flexibility, making it better suited for datasets with potential issues or inconsistencies. Conversely, the AI-generated code excels in speed and simplicity, providing a faster and more streamlined solution for clean, well-structured data. Overall, the manual solution is preferable when robustness and precision are priorities, while the AI-generated solution is ideal when efficiency and speed are essential, particularly for large-scale data. Combining the meticulous edge-case handling of the manual code with the streamlined performance of the AI solution would create a balanced approach that maximizes both reliability and efficiency.
+
+# Task 3: Inference {#part3}
+
+## Relevant Information
+
+**Research Question:** How does GameType affect TotalXP after accounting for the player's Score?
+
+## Data Cleaning
+
+```{r}
+# Clean GameType to merge HC and non-HC variants
+combined <- combined %>%
+  mutate(GameType = str_remove(GameType, "HC - ")) %>%
+  mutate(GameType = str_trim(GameType))
+```
+
+## Summary Statistics
+
+Explore the distribution of TotalXP across GameTypes.
+
+```{r}
+combined %>%
+  group_by(GameType) %>%
+  summarize(
+    MeanXP = mean(TotalXP, na.rm = TRUE),
+    MedianXP = median(TotalXP, na.rm = TRUE),
+    Count = n()
+  ) %>%
+  arrange(desc(MeanXP))
+```
+
+## Data Visualization
+
+### Distribution of TotalXP by GameType
+
+```{r}
+ggplot(combined, aes(x = GameType, y = TotalXP)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(
+    title = "Distribution of TotalXP by GameType",
+    x = "GameType",
+    y = "TotalXP"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+### Scatter Plot of TotalXP vs. Score by GameType
+
+```{r}
+ggplot(combined, aes(x = Score, y = TotalXP, color = GameType)) +
+  geom_point(alpha = 0.7) +
+  theme_minimal() +
+  labs(
+    title = "TotalXP vs. Score by GameType",
+    x = "Score",
+    y = "TotalXP",
+    color = "GameType"
+  )
+```
+
+## Modeling
+
+### Base Model: TotalXP ~ Score + GameType
+
+```{r}
+base_model <- lm(TotalXP ~ Score + GameType, data = combined)
+summary(base_model)
+```
+
+### Improved Model: TotalXP ~ Score * GameType
+
+```{r}
+
+improved_model <- lm(TotalXP ~ Score * GameType, data = combined)
+summary(improved_model)
+
+# Ensure residuals and fitted values match the dataset size
+combined <- combined %>%
+  filter(!is.na(TotalXP) & !is.na(Score)) %>%
+  mutate(
+    residuals = residuals(improved_model),
+    fitted = fitted(improved_model)
+  )
+```
+##### Explanation for the improved model:
+The improved model incorporates an interaction term (Score * GameType) to explore whether the relationship between Score and TotalXP varies across different GameTypes. This is based on the idea that some GameTypes may reward specific in-game actions or objectives differently, and these rewards could scale with Score in distinct ways. By including the interaction term, we can investigate how the effect of Score on TotalXP changes depending on the GameType.
+
+## Model Diagnostics: Residual Analysis
+
+#### Residuals vs Fitted Values
+
+```{r}
+ggplot(combined, aes(x = fitted, y = residuals)) +
+  geom_point(alpha = 0.7) +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+  theme_minimal() +
+  labs(
+    title = "Residuals vs Fitted Values",
+    x = "Fitted Values",
+    y = "Residuals"
+  )
+```
+
+#### QQ Plot for Residual Normality
+
+```{r}
+ggplot(combined, aes(sample = residuals)) +
+  geom_qq() +
+  geom_qq_line(color = "red") +
+  theme_minimal() +
+  labs(
+    title = "QQ Plot of Residuals",
+    x = "Theoretical Quantiles",
+    y = "Sample Quantiles"
+  )
+```
+
+## Results and Interpretation
+
+The analysis shows that GameType significantly impacts TotalXP after accounting for the player's Score. GameTypes such as "Domination" yield the highest TotalXP, followed by "Hardpoint" and "TDM," reflecting the differences in objectives and gameplay dynamics. These results align with the expectation that modes requiring more strategic play and longer durations lead to higher TotalXP.
+
+However, the models explain only about 30% of the variation in TotalXP, suggesting other factors, like player skill, time spent in-game, or specific in-game actions, also play a role. Including these variables could improve the model's accuracy. Additionally, the Score-TotalXP relationship may not be strictly linear, and testing non-linear models could provide a better fit.
+
+The interaction terms in the improved model highlight that the effect of Score on TotalXP varies by GameType, but most were not statistically significant. Simplifying the model by focusing only on significant interactions or using advanced methods like random forests may capture these relationships more effectively.
+
+Residual analysis indicates the model assumptions are mostly met, but refining the models with transformations or regression techniques could address issues with the dataset. 
+
+# Task 4: Prediction {#part4}
+
+For this task, we will be performing a comparative analysis of three different predictive models. We have opted to include Random Forest, Logistic Regression, and Naive Bayes models. The Random Forest model was required to be used, we were able to refer to the Logistic Regression model used within the notes, and we referred to the Naive Bayes model included in the caret library (found [here](https://www.geeksforgeeks.org/naive-bayes-classifier-in-r-programming/)) to compare how the probabilistic model compares with the other respective models. However, before we are able to properly begin performing the model creation process, we will need to develop our research question.       
+
+### Research Question: How well can we predict the performance of the players team given the players individual metrics: Eliminations, Deaths, Score, and Damage?
+
+Ultimately, we decided upon the variables: eliminations, Deaths, Score, and Damage for a couple of different reasons. Firstly, these are the statistical metrics of the players performance, and we have decided to include all except for the experience gain of the player as there are specific categories which create inconsistencies in the total experience gained in the match. Furthermore, if we decided to include only matches with a specific type of experience gain (XPType), then we will remove a significant amount of data from the model training which can impact the predictive capability of the different models. Therefore, we have decided to stick with the player performance metrics to predict the players team result. First, to implement the models we will need to perform some data cleaning to prepare the training data for the machine learning models.    
+
+### Data Cleaning
+
+```{r}
+split <- function(X) {
+  # Handle missing values
+  
+  if (is.na(X) || X == "") {
+    return(c(NA, NA))
+  }
+  
+  # Split the string
+  parts <- unlist(strsplit(X, "-"))
+  
+  # Convert to numeric and return
+  return(as.numeric(parts))
+}
+```
+
+```{r}
+# Apply the function to all of the results and store the results in a new data frame 
+results <- sapply(X = combined$Result, FUN = split)
+
+```
+
+```{r}
+# Store results as a data frame to create the Won variable
+Results <- data.frame(
+  Result = combined$Result,
+  Player = results[1, ],
+  Opposition = results[2, ]) %>%
+  mutate(Won = ifelse(Player > Opposition, "Yes","No"))
+
+combined$Won <- Results$Won
+
+# Keep only the indices with no na's
+combined <- combined[!is.na(combined$Won), ]
+  
+# Check the first 5 rows
+combined %>%
+  select(Result, Won) %>%
+  head(5)
+```
+
+```{r}
+# Create indicator for Won
+combined <- 
+  combined %>%
+  mutate(Won_bit = ifelse(Won == "Yes", 1, 0))
+
+# Check to make sure there are no na's
+sum(is.na(combined$Won_bit))
+```
+
+```{r}
+# Create Train and Test split
+set.seed(123)
+trainInd <- sample(1:nrow(combined), floor(0.8 * nrow(combined)))
+set.seed(NULL)
+
+Train <- combined[trainInd, ]
+Validation <- combined[-trainInd, ]
+```
+
+### Model Creation
+
+```{r}
+set.seed(123)
+
+# Random forest model
+rfModel <- randomForest(as.factor(Won) ~ Eliminations+Deaths+Score+Damage, 
+                        data = Train, 
+                        ntree = 500, 
+                        mtry = 3)
+
+# Logistic regression model
+logModel <- glm(Won_bit ~ Eliminations+Deaths+Score+Damage, family = binomial, data = Train)
+
+# Naive Bayes Model
+bayesModel <- naiveBayes(Won ~ Eliminations+Deaths+Score+Damage, data = Train)
+
+set.seed(NULL)
+```
+
+### Model Exploration
+
+```{r}
+# For Random Forest
+varImpPlot(rfModel, n.var = 6)
+```
+
+```{r}
+# For Logistic Regression
+summary(logModel)
+```
+#### Naive Bayes model was summarized in the next section
+
+
+### Model Evaluation
+
+```{r}
+# Generate results for Random Forest Model
+predWon <- predict(rfModel, newdata = Validation)
+  
+#Create confusion matrix
+table(predWon, Validation$Won)
+
+#Calculate accuracy
+mean(predWon == Validation$Won)
+```
+
+```{r}
+# Generate results for Logistic Regression Model
+
+# Establish threshold
+threshold <- 0.50
+
+# Generate predictions
+pred_prob <- predict(logModel, newdata = Validation, type = "response")
+
+#  
+pred_won <- ifelse(pred_prob > threshold, "Yes", "No")
+
+#Create confusion matrix
+table(pred_won, Validation$Won)
+
+#Calculate accuracy
+mean(pred_won == Validation$Won)
+```
+
+```{r}
+# Generate results for Naive Bayes Model
+y_pred <- predict(bayesModel, newdata = Validation)
+cm <- table(Validation$Won, y_pred)
+confusionMatrix(cm)
+```
+
+### Analysis of Models
+
+Overall, the models performed with a very similar level of prediction accuracy with the Logistic Regression model with a threshold of 0.5 performing the best with an overall accuracy over 0.7. We decided to use a threshold for prediction probability of over 0.5 as the threshold so that we could divide the values in half, as we did not want the threshold to be a large determiner in the overall accuracy of the model predictions. The next highest performing model was the Random Forest model with an accuracy score of 0.679. Finally, the Naive Bayes model came in just behind with an overall accuracy of 0.672. It is pertinent to note that all of these scores were the result of the model predicting new data that we had originally separated when training the model.    
+
+To make a more comprehensive analysis of the different models, we have opted to compare the confusion matrices that I have generated for each of the respective models. From the analysis, you can see that the Logistic Regression model predicted the most number of TP with 73, while having the lowest number of FP with only 16. Meanwhile, the Random Forest Model predicted the negative values with the most success, with 46 TN and only 27 FN. 
+
+While it is interesting to compare the different models, it is likely that for the purposes of predicting the team result relative to the players overall performance, roughly 70% accuracy from the different classification model applications is a fairly reasonable result. We can see this conceptually in the feature importance visual for the random forest and the summary of the logistic regression model. The models contain completely opposite feature importance hierarchy as determined by the decrease in gini gain and the coefficients respectively. As the random forest model obtains the largest gini gain from the Score and Damage variables, the Logistic Model uses the Eliminations and Deaths attributes to determine the team result. Overall, it is interesting to compare the different prediction metrics although our answer for our question ultimately lies around a predictive accuracy of 70% for the team result based on the individual player match performance attributes.       
+
+
