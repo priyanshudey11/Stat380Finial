@@ -381,7 +381,7 @@ ggplot(combined, aes(sample = residuals)) +
 
 The analysis shows that GameType significantly impacts TotalXP after accounting for the player's Score. GameTypes such as "Domination" yield the highest TotalXP, followed by "Hardpoint" and "TDM," reflecting the differences in objectives and gameplay dynamics. These results align with the expectation that modes requiring more strategic play and longer durations lead to higher TotalXP.
 
-However, the models explain only about 30% of the variation in TotalXP, suggesting other factors, like player skill, time spent in-game, or specific in-game actions, also play a role. Including these variables could improve the model's accuracy. Additionally, the Score-TotalXP relationship may not be strictly linear, and testing non-linear models could provide a better fit.
+However, the models explain only about 35% of the variation in TotalXP, suggesting other factors, like player skill, time spent in-game, or specific in-game actions, also play a role. Including these variables could improve the model's accuracy. Additionally, the Score-TotalXP relationship may not be strictly linear, and testing non-linear models could provide a better fit.
 
 The interaction terms in the improved model highlight that the effect of Score on TotalXP varies by GameType, but most were not statistically significant. Simplifying the model by focusing only on significant interactions or using advanced methods like random forests may capture these relationships more effectively.
 

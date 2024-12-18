@@ -40,6 +40,7 @@ CODGameModes <- read.csv("CODGameModes.csv")
 My thought process is that after reading through the Final Project PDF and going over the data csvs I realized that most of the CSVs need some cleansing to do. Since CODGames_p1_380 and CODGames_p2_380 are basically about a player each and their rankings in the online game, I think we should merge the dataframes to make it one more combined dataframe. I also realized that each of the two csvs have null values in the map and choices column so it would be important to remove them to keep all values in check. There are also trailing spaces as highlighted in the document so we would have to remove that also. I think it would be smart to eliminate rows that have missing choice values because they cant determine the winner. My thinking for the map winning criteria was to get unique maps from both map1 and map2 and then count the number of times they appear and then count wins where the map was chosen. Then I would count win from ties when map was map1.
 
 ```{r}
+### I feel we should double check if we should use rbind or bind_rows
 combined <- bind_rows(CODGames_p1_380, CODGames_p2_380)
 
 combined <- combined %>%
@@ -47,49 +48,63 @@ combined <- combined %>%
          Map2 = trimws(Map2),
          Choice = trimws(Choice)) %>%
   filter(!is.na(Map1) & !is.na(Map2) & !is.na(Choice)) 
-
 ```
 
 ### Calculating Map Choices Ratio/Stats
 ```{r}
 calculate_win_stats <- function(data) {
-    # Combine Map1 and Map2 into a candidate map column
-    all_maps <- unique(c(data$Map1, data$Map2))
-    all_maps <- all_maps[all_maps != "" & !is.na(all_maps)]  # Remove blanks and NAs
+
+    # Get unique maps
+    maps <- data %>%
+        select(Map1, Map2) %>%
+        unlist() %>%
+        unique() %>%
+        .[!is.na(.)]
     
-    # Calculate map appearances and wins
-    results <- data.frame(Map = all_maps)
-    results <- results %>%
-        rowwise() %>%
-        mutate(
-            Appearances = sum(data$Map1 == Map | data$Map2 == Map, na.rm = TRUE),
-            # Regular wins: Choice matches the map and it's not a tie (Map1 != Map2)
-            Regular_Wins = sum(data$Choice == Map & !(data$Map1 == Map & data$Map2 == Map), na.rm = TRUE),
-            # Tie wins: Choice matches the map and it's a tie (Map1 == Map2)
-            Tie_Wins = sum(data$Choice == Map & data$Map1 == Map & data$Map2 == Map, na.rm = TRUE),
-            Total_Wins = Regular_Wins + Tie_Wins,
-            Win_Rate = ifelse(Appearances > 0, round((Total_Wins / Appearances) * 100, 2), 0)
-        ) %>%
-        ungroup()
+    # Initialize results dataframe
+    results <- data.frame(
+        Map = maps,
+        Appearances = 0,
+        Regular_Wins = 0,
+        Tie_Wins = 0,
+        Win_Rate = 0
+    )
     
-    # Ensure Win Rate is capped at 100%
-    results$Win_Rate <- pmin(results$Win_Rate, 100)
+    for (map in maps) {
+        # Calculate statistics using pipes
+        stats <- data %>%
+            summarize(
+                appearances = sum(Map1 == map | Map2 == map, na.rm = TRUE),
+                regular_wins = sum(Choice == map & 
+                                 MapVote != paste(Map1, "to", Map1), 
+                                 na.rm = TRUE),
+                tie_wins = sum(Map1 == map & 
+                             MapVote == paste(Map1, "to", Map1), 
+                             na.rm = TRUE)
+            )
+        
+        # Calculate win rate
+        total_wins <- stats %>% 
+            transmute(total = regular_wins + tie_wins) %>% 
+            pull()
+        
+        win_rate <- round((total_wins / stats$appearances) * 100, 2)
+        
+        # Update results
+        results[results$Map == map,] <- c(map, 
+                                        stats$appearances, 
+                                        stats$regular_wins,
+                                        stats$tie_wins, 
+                                        win_rate)
+    }
+    
     return(results)
 }
-
 ```
+
 
 ```{r}
 maxresults <- calculate_win_stats(combined)
-maxresults <- maxresults %>%
-    filter(Map != "" & !is.na(Map))
-maxresults <- maxresults %>%
-    mutate(Win_Rate = ifelse(Win_Rate > 100, 100, Win_Rate))
-maxresults <- maxresults %>%
-    mutate(Win_Rate = ifelse(Win_Rate > 100, 100, Win_Rate))
-
-print(maxresults)
-
 ```
 
 ### Visualization
@@ -116,7 +131,7 @@ Raid and Standoff are consistently popular choices, winning 75% and 70% of their
 
 Generative AI Tool Selection
 
-For this task, we utilized ChatGPT (OpenAI GPT-4).
+For this task, we utilized ChatGPT (OpenAI GPT-4), known for its advanced natural language processing capabilities.
 
 Prompts Used:
 "we need to clean and analyze data from a video game voting dataset. The dataset includes information about two candidate maps (Map1 and Map2) and the final map chosen based on voting (Choice). Some rows include tie-breaking logic, where Map1 is selected by default in ties. our goal is to calculate the probability that each map wins when it is a candidate. Could you help me outline the data cleaning and analysis steps?"
@@ -519,5 +534,3 @@ Overall, the models performed with a very similar level of prediction accuracy w
 To make a more comprehensive analysis of the different models, we have opted to compare the confusion matrices that I have generated for each of the respective models. From the analysis, you can see that the Logistic Regression model predicted the most number of TP with 73, while having the lowest number of FP with only 16. Meanwhile, the Random Forest Model predicted the negative values with the most success, with 46 TN and only 27 FN. 
 
 While it is interesting to compare the different models, it is likely that for the purposes of predicting the team result relative to the players overall performance, roughly 70% accuracy from the different classification model applications is a fairly reasonable result. We can see this conceptually in the feature importance visual for the random forest and the summary of the logistic regression model. The models contain completely opposite feature importance hierarchy as determined by the decrease in gini gain and the coefficients respectively. As the random forest model obtains the largest gini gain from the Score and Damage variables, the Logistic Model uses the Eliminations and Deaths attributes to determine the team result. Overall, it is interesting to compare the different prediction metrics although our answer for our question ultimately lies around a predictive accuracy of 70% for the team result based on the individual player match performance attributes.       
-
-
